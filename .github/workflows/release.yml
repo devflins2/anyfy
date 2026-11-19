@@ -1,0 +1,99 @@
+name: Anyfy Production Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version Name (e.g. 1.0.5)'
+        required: true
+        default: '1.0.5'
+      version_code:
+        description: 'Version Code (e.g. 105)'
+        required: true
+        default: '105'
+      is_mandatory:
+        description: 'Is this update mandatory?'
+        type: boolean
+        default: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode Production Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > my-upload-key.jks
+          fi
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Signed Release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Calculate Release APK SHA-256
+        id: sha256
+        run: |
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
+          SHA=$(sha256sum "$APK_PATH" | awk '{print $1}')
+          echo "apk_sha256=$SHA" >> $GITHUB_OUTPUT
+          cp "$APK_PATH" "Anyfy-release.apk"
+
+      - name: Generate version.json manifest
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          VERSION_NAME="${{ inputs.version_name || github.ref_name }}"
+          VERSION_NAME="${VERSION_NAME#v}"
+          VERSION_CODE="${{ inputs.version_code || 105 }}"
+          MANDATORY="${{ inputs.is_mandatory || false }}"
+          REPO="${{ github.repository }}"
+          SHA="${{ steps.sha256.outputs.apk_sha256 }}"
+
+          cat <<EOF > version.json
+          {
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${VERSION_NAME}",
+            "apkUrl": "https://github.com/${REPO}/releases/download/${TAG_NAME}/Anyfy-release.apk",
+            "sha256": "${SHA}",
+            "releaseNotes": [
+              "Automatic in-app update with SHA-256 & signature integrity verification",
+              "Production-grade playback stability and YouTube Music catalogue synchronization",
+              "Personalized greeting and theme persistence"
+            ],
+            "mandatory": ${MANDATORY}
+          }
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Anyfy-release.apk
+            version.json
+          body_path: version.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

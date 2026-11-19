@@ -1,0 +1,65 @@
+*.iml
+.gradle
+.kotlin
+/local.properties
+.idea/
+.DS_Store
+# Build outputs & artifacts
+/build
+**/build/
+*.apk
+*.aab
+captures/
+.externalNativeBuild
+.cxx
+
+# Temporary and log files
+*.log
+*.tmp
+*.bak
+*.old
+build_debug.txt
+test_full_run.txt
+hs_err_pid*
+request_log.txt
+backend_stdout.log
+backend_stderr.log
+local.properties
+.env
+.env.*
+*.env
+!.env.example
+node_modules/
+backend/node_modules/
+*service-account*.json
+*credentials*.json
+
+# Secrets — never commit these
+debug.keystore
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
+# YouTube / backend cookies — contain live session tokens
+cookies.txt
+backend/cookies.txt
+
+# Backend environment and config secrets
+backend/.env
+backend/*.key
+backend/*.pem
+
+# Tunnel URL files (contain live public URLs to your local machine)
+tunnel*.txt
+tunnel*.log
+
+# Python virtual environment and cache
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+backend/__pycache__/
+backend/**/__pycache__/
+
+
