@@ -1,15 +1,16 @@
 {
-  "versionCode": 105,
-  "versionName": "1.0.5",
-  "apkUrl": "https://github.com/devflins2/anyfy/releases/download/v1.0.5/Anyfy-release.apk",
+  "versionCode": 100,
+  "versionName": "1.0.0",
+  "apkUrl": "https://github.com/devflins2/anyfy/releases/download/v1.0.0/Anyfy-release.apk",
   "sha256": "c22f20174fb1efb1c379b8abbc6954bb902542d4167b3956397576eee8b5c94c",
   "releaseNotes": [
-    "Integrated production-ready automatic in-app APK updater with SHA-256 & signature integrity verification",
-    "Streamlined YouTube Music authentication (guest mode completely eliminated)",
-    "Personalized time-of-day Home greeting with persistent display name and custom greeting modes",
-    "Fixed account profile overwrite bug preserving user-saved display names across restarts",
-    "Enhanced player banner resolution and dynamic wide album artwork loading",
-    "Optimized smart caching and background playback stability"
+    "First official production release of Anyfy Android",
+    "YouTube Music catalog search & background playback with AndroidX Media3",
+    "Single source of truth: direct playlist synchronization with YouTube Music",
+    "Together Listening: synchronized real-time group audio rooms via Socket.IO",
+    "On-device audio extraction (yt-dlp) without third-party proxies",
+    "Personalized time-of-day Home greeting and user preferences",
+    "Built-in automatic in-app updater with SHA-256 integrity verification"
   ],
   "mandatory": false
 }
