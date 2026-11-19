@@ -26,9 +26,9 @@ To protect our members and foster a healthy collaboration space, certain actions
 
 ## 4. Reporting Issues
 
-If you experience or witness behavior that violates this Code of Conduct, or if you have any safety concerns, please reach out directly to the project maintainers:
+If you experience or witness behavior that violates this Code of Conduct, or if you have any safety concerns, please reach out directly and confidentially to the project maintainers:
 
-- **Contact Email:** [MAINTAINER_EMAIL_HERE]
+- **Repository Maintainer:** Reach out privately to the repository owner at [https://github.com/devflins2](https://github.com/devflins2) or submit a confidential report via GitHub Private Vulnerability / Maintainer Advisory.
 
 All reports will be reviewed promptly and handled with strict confidentiality. The maintainers are dedicated to safeguarding the privacy and security of anyone submitting a concern.
 

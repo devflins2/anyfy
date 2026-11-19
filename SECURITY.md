@@ -17,8 +17,15 @@ If you discover a security vulnerability in Anyfy, please report it responsibly.
 
 **Please do NOT open public GitHub issues, discussions, or pull requests for security vulnerabilities.**
 
-Contact the maintainers privately at:
-`[MAINTAINER_EMAIL_HERE]`
+Instead, please report vulnerabilities privately using GitHub's **Private Vulnerability Reporting**:
+
+1. Navigate to the Anyfy repository: [https://github.com/devflins2/anyfy](https://github.com/devflins2/anyfy).
+2. Click on the **Security** tab below the repository title.
+3. Select **Advisories** on the left sidebar.
+4. Click the green **Report a vulnerability** button to open a confidential advisory draft directly with the repository maintainers.
+5. Provide detailed information about the vulnerability using the guidance below.
+
+If Private Vulnerability Reporting is not yet active on the repository, contact repository maintainers privately through their GitHub profile at [https://github.com/devflins2](https://github.com/devflins2).
 
 ### What to Include in Your Report
 
