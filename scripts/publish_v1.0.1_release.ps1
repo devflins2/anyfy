@@ -43,7 +43,7 @@ Welcome to **Anyfy v1.0.1**, featuring major stability fixes, storage audit opti
 - **Critical Playback & UI Fixes:**
   - **Settings Integration Duplication:** Eliminated duplicate YouTube Music integration entries in Settings; maintained one canonical settings item.
   - **Notification Timeline Freezing:** Throttled MediaSession IPC updates, fixed seekbar snap-back, and propagated ExoPlayer track duration accurately.
-  - **Completed Song Replay:** Fixed playback failure when tapping play or seeking on a song that reached the end of playback (`STATE_ENDED`).
+  - **Completed Song Replay:** Fixed playback failure when tapping play or seeking on a song that reached the end of playback (\`STATE_ENDED\`).
 
 ---
 
@@ -106,9 +106,8 @@ if (-not $release) {
 }
 
 $releaseId = $release.id
-$uploadBaseUrl = "https://uploads.github.com/repos/$repo/releases/$releaseId/assets"
 
-# 3. Upload Anyfy-release.apk
+# 3. Upload Anyfy-release.apk via curl
 $apkPath = "app/build/outputs/apk/release/app-release.apk"
 if (-not (Test-Path $apkPath)) {
     $apkPath = "Anyfy-release.apk"
@@ -125,17 +124,9 @@ if ($existingApk) {
     Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/assets/$($existingApk.id)" -Headers $headers -Method Delete
 }
 
-$uploadApkUri = "$uploadBaseUrl?name=$apkName"
-$apkBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $apkPath).Path)
-$apkUploadHeaders = @{
-    "Authorization" = "Bearer $token"
-    "Content-Type" = "application/vnd.android.package-archive"
-    "User-Agent" = "Anyfy-Release-Agent"
-}
-$apkAsset = Invoke-RestMethod -Uri $uploadApkUri -Headers $apkUploadHeaders -Method Post -Body $apkBytes
-Write-Host "Uploaded $apkName successfully! ID: $($apkAsset.id), Download URL: $($apkAsset.browser_download_url)" -ForegroundColor Green
+curl.exe -s -X POST -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" -H "Content-Type: application/vnd.android.package-archive" --data-binary "@$apkPath" "https://uploads.github.com/repos/$repo/releases/$releaseId/assets?name=$apkName"
 
-# 4. Upload version.json
+# 4. Upload version.json via curl
 $manifestPath = "version.json"
 $manifestName = "version.json"
 Write-Host "Uploading $manifestName..." -ForegroundColor Cyan
@@ -146,19 +137,9 @@ if ($existingManifest) {
     Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/assets/$($existingManifest.id)" -Headers $headers -Method Delete
 }
 
-$uploadManifestUri = "$uploadBaseUrl?name=$manifestName"
-$manifestBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $manifestPath).Path)
-$manifestUploadHeaders = @{
-    "Authorization" = "Bearer $token"
-    "Content-Type" = "application/json"
-    "User-Agent" = "Anyfy-Release-Agent"
-}
-$manifestAsset = Invoke-RestMethod -Uri $uploadManifestUri -Headers $manifestUploadHeaders -Method Post -Body $manifestBytes
-Write-Host "Uploaded $manifestName successfully! ID: $($manifestAsset.id), Download URL: $($manifestAsset.browser_download_url)" -ForegroundColor Green
+curl.exe -s -X POST -H "Authorization: Bearer $token" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" --data-binary "@$manifestPath" "https://uploads.github.com/repos/$repo/releases/$releaseId/assets?name=$manifestName"
 
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "GitHub Release v1.0.1 successfully published!" -ForegroundColor Green
 Write-Host "Release Page: $($release.html_url)" -ForegroundColor Green
-Write-Host "APK Download URL: $($apkAsset.browser_download_url)" -ForegroundColor Green
-Write-Host "Manifest URL: $($manifestAsset.browser_download_url)" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
