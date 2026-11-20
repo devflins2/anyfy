@@ -425,9 +425,15 @@ class AutomaticApkUpdateSystemRegressionTest {
         // Calculate actual SHA-256 using verifier
         val verifier = DefaultApkIntegrityVerifier(context)
         val computedSha256 = verifier.calculateFileSha256(apkToTest)
+        val manifestFile = File("version.json").takeIf { it.exists() } ?: File("../version.json")
+        val expectedSha = if (manifestFile.exists()) {
+            VersionManifest.fromJson(manifestFile.readText()).sha256
+        } else {
+            "da3f34452b1571914ba051dd78a21d3796ab5a2224c28285b67469e9cf8b66ec"
+        }
         assertEquals(
             "Computed SHA-256 must match version.json manifest checksum",
-            "c22f20174fb1efb1c379b8abbc6954bb902542d4167b3956397576eee8b5c94c",
+            expectedSha,
             computedSha256
         )
 

@@ -30,7 +30,8 @@ sealed class UpdateStatus {
     data class Failed(
         val error: UpdateError,
         val message: String,
-        val canRetry: Boolean = true
+        val canRetry: Boolean = true,
+        val manifest: VersionManifest? = null
     ) : UpdateStatus()
 }
 

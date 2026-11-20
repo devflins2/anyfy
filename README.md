@@ -47,7 +47,7 @@ The latest official release APK is signed with Anyfy's production release key an
 - **Signing Scheme:** APK Signature Scheme v2 (RSA 2048-bit, Anyfy Production)
 - **Verified SHA-256 Checksum:**
   ```text
-  da3f34452b1571914ba051dd78a21d3796ab5a2224c28285b67469e9cf8b66ec
+  bfa9ecfddd3bffae74ebbbdb7c785d1cd1821f4845bfc72a050f984847bd5772
   ```
 
 ### Step-by-Step Installation Instructions

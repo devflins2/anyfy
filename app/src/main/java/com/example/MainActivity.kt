@@ -202,6 +202,29 @@ class MainActivity : ComponentActivity() {
                     authViewModel = authViewModel,
                     mainViewModel = viewModel
                 )
+
+                // Global In-App Update Dialog (Rendered at top-level regardless of auth state once splash completes or when downloading/verifying)
+                val updateStatus by updateManager.updateStatus.collectAsState()
+                val isSplashCompleted by viewModel.isSplashCompleted.collectAsState()
+                val showUpdateDialog = when (val s = updateStatus) {
+                    is com.example.service.update.UpdateStatus.UpdateAvailable -> isSplashCompleted && (!s.isDismissed || s.isMandatory)
+                    is com.example.service.update.UpdateStatus.Downloading -> true
+                    is com.example.service.update.UpdateStatus.Verifying -> true
+                    is com.example.service.update.UpdateStatus.ReadyToInstall -> true
+                    is com.example.service.update.UpdateStatus.PermissionRequired -> true
+                    is com.example.service.update.UpdateStatus.Failed -> s.manifest != null && s.canRetry
+                    else -> false
+                }
+
+                if (showUpdateDialog) {
+                    com.example.ui.components.UpdateDialog(
+                        status = updateStatus,
+                        onUpdateNow = { manifest -> updateManager.startDownload(manifest) },
+                        onInstallNow = { updateManager.installUpdate(this@MainActivity) },
+                        onRetry = { updateManager.startDownload() },
+                        onDismiss = { updateManager.dismissUpdate() }
+                    )
+                }
             }
         }
     }
@@ -911,34 +934,9 @@ fun MainAppContent(viewModel: MainViewModel, authViewModel: AuthViewModel) {
             )
         }
 
-        // Automatic In-App Update Dialog
+        // In-App Update Feedback Listener
         val updateMgr = viewModel.appUpdateManager
         if (updateMgr != null) {
-            val updateStatus by updateMgr.updateStatus.collectAsState()
-            val activity = context as? androidx.activity.ComponentActivity
-            val showDialog = when (val s = updateStatus) {
-                is com.example.service.update.UpdateStatus.UpdateAvailable -> !s.isDismissed || s.isMandatory
-                is com.example.service.update.UpdateStatus.Downloading -> true
-                is com.example.service.update.UpdateStatus.Verifying -> true
-                is com.example.service.update.UpdateStatus.ReadyToInstall -> true
-                is com.example.service.update.UpdateStatus.PermissionRequired -> true
-                is com.example.service.update.UpdateStatus.Failed -> s.canRetry
-                else -> false
-            }
-
-            if (showDialog) {
-                com.example.ui.components.UpdateDialog(
-                    status = updateStatus,
-                    onUpdateNow = { manifest -> updateMgr.startDownload(manifest) },
-                    onInstallNow = {
-                        if (activity != null) {
-                            updateMgr.installUpdate(activity)
-                        }
-                    },
-                    onRetry = { updateMgr.startDownload() },
-                    onDismiss = { updateMgr.dismissUpdate() }
-                )
-            }
 
             LaunchedEffect(updateMgr) {
                 updateMgr.updateStatus.collect { status ->

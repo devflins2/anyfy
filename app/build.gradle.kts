@@ -25,7 +25,7 @@ android {
       abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
     }
 
-    buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://raw.githubusercontent.com/devflins2/anyfy/main/version.json\"")
+    buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://github.com/devflins2/anyfy/releases/latest/download/version.json\"")
     buildConfigField("String", "GITHUB_RELEASES_URL", "\"https://github.com/devflins2/anyfy/releases\"")
   }
 

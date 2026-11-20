@@ -2,14 +2,14 @@
   "versionCode": 101,
   "versionName": "1.0.1",
   "apkUrl": "https://github.com/devflins2/anyfy/releases/download/v1.0.1/Anyfy-release.apk",
-  "sha256": "da3f34452b1571914ba051dd78a21d3796ab5a2224c28285b67469e9cf8b66ec",
+  "sha256": "bfa9ecfddd3bffae74ebbbdb7c785d1cd1821f4845bfc72a050f984847bd5772",
   "releaseNotes": [
     "YouTube Music two-way playlist synchronization & remote write-back",
     "Fixed Together Listening playlist import overlay navigation bug",
     "Optimized storage footprint: ~50% APK size reduction (~37.9 MB) with R8 shrinking",
     "Fixed duplicate YouTube Music integration entry in Settings screen",
     "Fixed notification timeline scrubber freezing & instant replay for completed songs",
-    "Enhanced Coil artwork cache management and expired resource eviction"
+    "Enhanced automatic in-app update detection on cold startup with resilient endpoint fallback"
   ],
   "mandatory": false
 }

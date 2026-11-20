@@ -69,6 +69,7 @@ fun UpdateDialog(
         is UpdateStatus.Verifying -> status.manifest
         is UpdateStatus.ReadyToInstall -> status.manifest
         is UpdateStatus.PermissionRequired -> status.manifest
+        is UpdateStatus.Failed -> status.manifest
         else -> null
     } ?: return
 
@@ -78,6 +79,7 @@ fun UpdateDialog(
         is UpdateStatus.Verifying -> status.manifest.mandatory
         is UpdateStatus.ReadyToInstall -> status.manifest.mandatory
         is UpdateStatus.PermissionRequired -> status.manifest.mandatory
+        is UpdateStatus.Failed -> status.manifest?.mandatory ?: false
         else -> false
     }
 
@@ -162,7 +164,7 @@ fun UpdateDialog(
                             text = "v${manifest.versionName} (${manifest.versionCode})",
                             style = FlinsTheme.typography.caption.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                color = FlinsCyan
+                                color = Color(0xFFE0E0E0)
                             )
                         )
                     }
@@ -244,7 +246,7 @@ fun UpdateDialog(
                                 ) {
                                     Text(
                                         text = "•",
-                                        color = FlinsCyan,
+                                        color = Color(0xFFBDBDBD),
                                         modifier = Modifier.padding(end = 8.dp)
                                     )
                                     Text(
@@ -279,7 +281,7 @@ fun UpdateDialog(
                                     .height(8.dp)
                                     .clip(RoundedCornerShape(4.dp))
                                     .testTag("update_progress_bar"),
-                                color = FlinsCyan,
+                                color = Color(0xFFE0E0E0),
                                 trackColor = Color(0xFF333333)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
@@ -311,7 +313,7 @@ fun UpdateDialog(
                                     Text(
                                         text = speedText,
                                         style = FlinsTheme.typography.caption,
-                                        color = FlinsCyan
+                                        color = Color(0xFFBDBDBD)
                                     )
                                 }
                             }
@@ -328,7 +330,7 @@ fun UpdateDialog(
                         ) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
-                                color = FlinsCyan,
+                                color = Color(0xFFE0E0E0),
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
