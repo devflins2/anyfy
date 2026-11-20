@@ -1,16 +1,15 @@
 {
-  "versionCode": 100,
-  "versionName": "1.0.0",
-  "apkUrl": "https://github.com/devflins2/anyfy/releases/download/v1.0.0/Anyfy-release.apk",
-  "sha256": "c22f20174fb1efb1c379b8abbc6954bb902542d4167b3956397576eee8b5c94c",
+  "versionCode": 101,
+  "versionName": "1.0.1",
+  "apkUrl": "https://github.com/devflins2/anyfy/releases/download/v1.0.1/Anyfy-release.apk",
+  "sha256": "da3f34452b1571914ba051dd78a21d3796ab5a2224c28285b67469e9cf8b66ec",
   "releaseNotes": [
-    "First official production release of Anyfy Android",
-    "YouTube Music catalog search & background playback with AndroidX Media3",
-    "Single source of truth: direct playlist synchronization with YouTube Music",
-    "Together Listening: synchronized real-time group audio rooms via Socket.IO",
-    "On-device audio extraction (yt-dlp) without third-party proxies",
-    "Personalized time-of-day Home greeting and user preferences",
-    "Built-in automatic in-app updater with SHA-256 integrity verification"
+    "YouTube Music two-way playlist synchronization & remote write-back",
+    "Fixed Together Listening playlist import overlay navigation bug",
+    "Optimized storage footprint: ~50% APK size reduction (~37.9 MB) with R8 shrinking",
+    "Fixed duplicate YouTube Music integration entry in Settings screen",
+    "Fixed notification timeline scrubber freezing & instant replay for completed songs",
+    "Enhanced Coil artwork cache management and expired resource eviction"
   ],
   "mandatory": false
 }

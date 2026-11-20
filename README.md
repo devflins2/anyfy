@@ -34,20 +34,20 @@ The latest official release APK is signed with Anyfy's production release key an
 
 | Asset | Details | Link |
 | :--- | :--- | :--- |
-| **Latest Release Page** | GitHub Releases (Notes & Assets) | [Release v1.0.0](https://github.com/devflins2/anyfy/releases/latest) |
-| **Direct APK Download** | Production Signed APK (~71.2 MB) | [Download Anyfy-release.apk](https://github.com/devflins2/anyfy/releases/download/v1.0.0/Anyfy-release.apk) |
+| **Latest Release Page** | GitHub Releases (Notes & Assets) | [Release v1.0.1](https://github.com/devflins2/anyfy/releases/latest) |
+| **Direct APK Download** | Production Signed APK (~37.9 MB) | [Download Anyfy-release.apk](https://github.com/devflins2/anyfy/releases/download/v1.0.1/Anyfy-release.apk) |
 | **Version Manifest** | Automated In-App Update Manifest | [`version.json`](https://raw.githubusercontent.com/devflins2/anyfy/main/version.json) |
 
 ### Verification Details
 
 - **Package ID:** `com.aistudio.flinsmusic.zrqv`
-- **Release Version:** `1.0.0` (Build `100`)
+- **Release Version:** `1.0.1` (Build `101`)
 - **Minimum Android Version:** Android 8.0 (API Level 26)
 - **Target Android Version:** Android 16 (API Level 36)
 - **Signing Scheme:** APK Signature Scheme v2 (RSA 2048-bit, Anyfy Production)
 - **Verified SHA-256 Checksum:**
   ```text
-  c22f20174fb1efb1c379b8abbc6954bb902542d4167b3956397576eee8b5c94c
+  da3f34452b1571914ba051dd78a21d3796ab5a2224c28285b67469e9cf8b66ec
   ```
 
 ### Step-by-Step Installation Instructions
