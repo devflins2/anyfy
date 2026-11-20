@@ -1045,8 +1045,43 @@ class PlaybackService(
 
     fun resume() {
         val current = _uiState.value
-        if (current.currentTrack == null) return
+        val track = current.currentTrack ?: return
         val player = exoPlayer
+
+        // Check if player or track is in a completed/ended state
+        val isCompleted = (player != null && player.playbackState == Player.STATE_ENDED) ||
+                (!current.isPlaying && current.status == PlayerStatus.IDLE && player != null && player.playbackState == Player.STATE_ENDED) ||
+                (current.durationMs > 0L && current.currentPositionMs >= current.durationMs - 250L)
+
+        if (isCompleted) {
+            isPrepared = true
+            _uiState.update { it.copy(currentPositionMs = 0L, isPlaying = true, status = PlayerStatus.PLAYING) }
+            if (player != null) {
+                val restartAction = {
+                    try {
+                        if (player.mediaItemCount > 0) {
+                            player.seekTo(0L)
+                            player.prepare()
+                            player.play()
+                        } else {
+                            playTrack(track, current.queue)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("PlaybackService", "Error restarting ended track: ${e.message}")
+                        playTrack(track, current.queue)
+                    }
+                }
+                if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                    restartAction()
+                } else {
+                    scope.launch(Dispatchers.Main) { restartAction() }
+                }
+            }
+            startPlaybackLoop()
+            startReactiveEngine()
+            return
+        }
+
         if (player != null && isPrepared) {
             if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
                 try { player.play() } catch (_: Exception) {}
@@ -1058,11 +1093,24 @@ class PlaybackService(
             _uiState.update { it.copy(isPlaying = true, status = PlayerStatus.PLAYING) }
             startPlaybackLoop()
         } else if (!isStreaming) {
-            _uiState.update { it.copy(isPlaying = true, status = PlayerStatus.PLAYING) }
+            val startPos = if (current.durationMs > 0 && current.currentPositionMs >= current.durationMs) 0L else current.currentPositionMs
+            _uiState.update { it.copy(isPlaying = true, status = PlayerStatus.PLAYING, currentPositionMs = startPos) }
             startPlaybackLoop()
         } else {
-            player?.playWhenReady = true
-            _uiState.update { it.copy(isPlaying = true) }
+            if (player != null) {
+                val playAction = {
+                    try {
+                        player.prepare()
+                        player.play()
+                    } catch (_: Exception) {}
+                }
+                if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                    playAction()
+                } else {
+                    scope.launch(Dispatchers.Main) { playAction() }
+                }
+            }
+            _uiState.update { it.copy(isPlaying = true, status = PlayerStatus.PLAYING) }
             startPlaybackLoop()
         }
         startReactiveEngine()
@@ -1084,13 +1132,26 @@ class PlaybackService(
         _uiState.update { it.copy(currentPositionMs = clamped) }
 
         val player = exoPlayer
-        if (player != null && isPrepared) {
-            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-                try { player.seekTo(clamped) } catch (_: Exception) {}
-            } else {
-                scope.launch(Dispatchers.Main) {
-                    try { player.seekTo(clamped) } catch (_: Exception) {}
+        if (player != null) {
+            if (player.playbackState == Player.STATE_ENDED) {
+                isPrepared = true
+            }
+            if (isPrepared) {
+                val seekAction = {
+                    try {
+                        player.seekTo(clamped)
+                        if (player.playbackState == Player.STATE_ENDED) {
+                            player.prepare()
+                        }
+                    } catch (_: Exception) {}
                 }
+                if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                    seekAction()
+                } else {
+                    scope.launch(Dispatchers.Main) { seekAction() }
+                }
+            } else if (isStreaming) {
+                pendingSeekPositionMs = clamped
             }
         } else if (isStreaming) {
             pendingSeekPositionMs = clamped
@@ -1693,6 +1754,9 @@ class PlaybackService(
                 val current = _uiState.value
                 val player = exoPlayer
                 if (isStreaming && player != null && isPrepared) {
+                    if (player.playbackState == Player.STATE_ENDED) {
+                        continue
+                    }
                     try {
                         val livePos = player.currentPosition.coerceAtLeast(0L)
                         val liveDur = player.duration
@@ -1752,7 +1816,7 @@ class PlaybackService(
                     } catch (e: Exception) {
                         android.util.Log.w("PlaybackService", "Error reading player position: ${e.message}")
                     }
-                } else if (!isStreaming || player == null) {
+                } else if (!isStreaming && player == null) {
                     val newPos = current.currentPositionMs + 50L
                     if (newPos >= current.durationMs && current.durationMs > 0) {
                         when (current.repeatMode) {

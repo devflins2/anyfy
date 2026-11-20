@@ -63,7 +63,7 @@ class PlaylistImportService(
     }
 
     /**
-     * Creates a new Anyfy playlist and adds all selected/matched tracks.
+     * Creates a new Anyfy playlist on YouTube Music and adds all selected/matched tracks.
      */
     suspend fun commitImport(
         playlistName: String,
@@ -81,27 +81,34 @@ class PlaylistImportService(
                 matchedTracks.firstOrNull()?.artwork ?: ""
             }
 
-            // Create new Anyfy playlist
-            val newPlaylistId = musicRepository.createPlaylist(
+            // Deduplicate matched tracks preserving order
+            val distinctTracks = matchedTracks.distinctBy { it.id }
+            val videoIds = distinctTracks.map { it.id }
+
+            // Ensure all track metadata is registered in repository/Room
+            distinctTracks.forEach { musicRepository.registerTrack(it) }
+
+            // Create new playlist on YouTube Music populated with the resolved tracks
+            val createResult = musicRepository.createPlaylistResult(
                 name = playlistName.trim(),
                 description = playlistDescription.trim(),
                 artwork = plArtwork,
-                userId = userId
+                privacyStatus = "PRIVATE",
+                userId = userId,
+                initialTrackIds = videoIds
             )
 
-            if (newPlaylistId.isBlank()) {
-                return@withContext Result.failure(IllegalStateException("Failed to create playlist."))
+            if (createResult.isFailure) {
+                val err = createResult.exceptionOrNull() ?: IllegalStateException("Failed to create playlist on YouTube Music.")
+                return@withContext Result.failure(err)
             }
 
-            // Add matched tracks preserving original order
-            val addedTrackIds = mutableSetOf<String>()
-            for (track in matchedTracks) {
-                // Ensure duplicate track IDs are not inserted multiple times
-                if (!addedTrackIds.contains(track.id)) {
-                    musicRepository.addTrackToPlaylist(newPlaylistId, track, userId)
-                    addedTrackIds.add(track.id)
-                }
-            }
+            val newPlaylistId = createResult.getOrThrow()
+
+            // Sync library cache so it immediately reflects in the UI
+            try {
+                musicRepository.fetchUserPlaylists(forceRefresh = true)
+            } catch (_: Exception) {}
 
             Result.success(newPlaylistId)
         } catch (e: Exception) {

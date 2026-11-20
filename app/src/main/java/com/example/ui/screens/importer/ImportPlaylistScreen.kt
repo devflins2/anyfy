@@ -1,5 +1,6 @@
 package com.example.ui.screens.importer
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -43,6 +44,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,6 +100,21 @@ fun ImportPlaylistScreen(
     val createdPlaylistId by viewModel.createdPlaylistId.collectAsState()
 
     var candidatePickerIndex by remember { mutableStateOf<Int?>(null) }
+
+    BackHandler {
+        if (step == ImportStep.INPUT || step == ImportStep.SUCCESS || step == ImportStep.ERROR) {
+            onBack()
+        } else {
+            viewModel.cancelImport()
+            onBack()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.cancelImport()
+        }
+    }
 
     Box(
         modifier = modifier

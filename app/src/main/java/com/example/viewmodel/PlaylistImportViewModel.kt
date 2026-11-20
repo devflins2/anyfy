@@ -204,6 +204,9 @@ class PlaylistImportViewModel(
             if (commitResult.isSuccess) {
                 _createdPlaylistId.value = commitResult.getOrThrow()
                 _step.value = ImportStep.SUCCESS
+                try {
+                    musicRepository.fetchUserPlaylists(forceRefresh = true)
+                } catch (_: Exception) {}
             } else {
                 _errorMessage.value = commitResult.exceptionOrNull()?.message ?: "Failed to import playlist."
                 _step.value = ImportStep.ERROR

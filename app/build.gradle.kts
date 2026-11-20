@@ -22,7 +22,7 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     ndk {
-      abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
+      abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
     }
 
     buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://raw.githubusercontent.com/devflins2/anyfy/main/version.json\"")
@@ -66,8 +66,9 @@ android {
 
   buildTypes {
     release {
-      isCrunchPngs = false
-      isMinifyEnabled = false
+      isCrunchPngs = true
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }

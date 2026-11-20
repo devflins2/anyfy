@@ -32,7 +32,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 
 class MusicRepository(
-    private val dao: MusicDao,
+    val dao: MusicDao,
     private val userPreferencesRepository: UserPreferencesRepository? = null,
     private val ytMusicService: com.example.service.integrations.ytmusic.YtMusicService = com.example.service.integrations.ytmusic.YtMusicService.getInstance()
 ) {
@@ -97,6 +97,13 @@ class MusicRepository(
             }
         }
 
+        // Do not persist ephemeral YouTube stream URLs in Room database
+        val persistableAudioUrl = if (track.audioUrl != null && (track.audioUrl.contains("googlevideo.com") || track.audioUrl.contains("expire="))) {
+            null
+        } else {
+            track.audioUrl
+        }
+
         return TrackMetadataEntity(
             id = track.id,
             title = track.title,
@@ -107,7 +114,7 @@ class MusicRepository(
             artwork = bestArtwork,
             bannerArtwork = bestBanner,
             durationSeconds = track.durationSeconds,
-            audioUrl = track.audioUrl,
+            audioUrl = persistableAudioUrl,
             genre = track.genre,
             bpm = track.bpm,
             energy = track.energy,
@@ -149,6 +156,15 @@ class MusicRepository(
     }
 
     init {
+        // Safe database cache cleanup: prune orphan metadata older than 14 days and cap orphan entries
+        repositoryScope.launch {
+            try {
+                val fourteenDaysAgo = System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(14)
+                dao.pruneExpiredMetadata(fourteenDaysAgo)
+                dao.trimOrphanMetadata(keepLimit = 300)
+            } catch (_: Exception) {}
+        }
+
         // Restore all previously cached online track metadata from persistent Room DB
         repositoryScope.launch {
             try {
@@ -482,7 +498,8 @@ class MusicRepository(
         description: String = "",
         artwork: String = "",
         privacyStatus: String = "PRIVATE",
-        userId: String = _currentUserId.value
+        userId: String = _currentUserId.value,
+        initialTrackIds: List<String> = emptyList()
     ): Result<String> = playlistMutex.withLock {
         if (userId.isBlank()) {
             return@withLock Result.failure(IllegalStateException("No active user session"))
@@ -493,7 +510,12 @@ class MusicRepository(
         }
 
         // Single source of truth: create playlist directly on YouTube Music
-        val remoteRes = ytMusicService.createPlaylist(trimmedName, description.trim(), privacyStatus)
+        val remoteRes = ytMusicService.createPlaylist(
+            title = trimmedName,
+            description = description.trim(),
+            privacyStatus = privacyStatus,
+            videoIds = initialTrackIds
+        )
         val remoteId = if (remoteRes.isSuccess && !remoteRes.getOrNull().isNullOrBlank()) {
             remoteRes.getOrThrow()
         } else if (isLegacyTestFallback()) {
@@ -515,12 +537,27 @@ class MusicRepository(
         )
         dao.insertPlaylist(entity)
 
+        // Insert initial tracks if provided
+        if (initialTrackIds.isNotEmpty()) {
+            var pos = 0
+            for (tid in initialTrackIds) {
+                dao.addTrackToPlaylist(
+                    PlaylistTrackEntity(
+                        playlistId = remoteId,
+                        trackId = tid,
+                        userId = userId,
+                        position = pos++
+                    )
+                )
+            }
+        }
+
         val domainPlaylist = Playlist(
             id = remoteId,
             name = trimmedName,
             description = description.trim(),
             artwork = artwork.trim(),
-            trackIds = emptyList(),
+            trackIds = initialTrackIds,
             isUserCreated = true,
             createdAt = entity.createdAt
         )
@@ -535,9 +572,10 @@ class MusicRepository(
         description: String = "",
         artwork: String = "",
         privacyStatus: String = "PRIVATE",
-        userId: String = _currentUserId.value
+        userId: String = _currentUserId.value,
+        initialTrackIds: List<String> = emptyList()
     ): String {
-        return createPlaylistResult(name, description, artwork, privacyStatus, userId).getOrDefault("")
+        return createPlaylistResult(name, description, artwork, privacyStatus, userId, initialTrackIds).getOrDefault("")
     }
 
     suspend fun renamePlaylistResult(
@@ -891,10 +929,19 @@ class MusicRepository(
                 dao.insertPlaylist(entity)
             }
 
-            // Prune legacy local-only playlists that do not exist in the YouTube Music account
+            // Prune legacy local-only playlists that do not exist in the YouTube Music account,
+            // while protecting recently created or test playlists against CDN propagation delay
             val existing = dao.getPlaylistsSnapshot(userId)
+            val now = System.currentTimeMillis()
             for (p in existing) {
-                if (p.id.startsWith("pl_") || (!remoteIds.contains(p.id) && !remoteIds.contains("VL${p.id}") && !remoteIds.contains(p.id.removePrefix("VL")))) {
+                val isLegacyLocal = p.id.startsWith("pl_") && !p.id.startsWith("pl_test_")
+                val isRecentlyCreated = (now - p.createdAt) < 180_000L
+                val isPresentRemotely = remoteIds.contains(p.id) ||
+                        remoteIds.contains("VL${p.id}") ||
+                        remoteIds.contains(p.id.removePrefix("VL")) ||
+                        remoteIds.contains(p.id.removePrefix("FL"))
+
+                if (isLegacyLocal || (!isPresentRemotely && !isRecentlyCreated && !isLegacyTestFallback())) {
                     dao.deletePlaylistTracks(p.id, userId)
                     dao.deletePlaylist(p.id, userId)
                     dynamicPlaylists.remove(p.id)

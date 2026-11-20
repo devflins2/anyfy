@@ -2,6 +2,7 @@ package com.example
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -369,6 +370,11 @@ fun MainAppContent(viewModel: MainViewModel, authViewModel: AuthViewModel) {
             )
         }
 
+        val isAnyBackHandled = isFullPlayerVisible || isAdminDashboardOpen || isSettingsOpen || isImportPlaylistOpen || currentSubScreen != null
+        BackHandler(enabled = isAnyBackHandled) {
+            viewModel.navigateBack()
+        }
+
         // Sub-screen Navigation Layer (Admin Dashboard, Settings, Artist, Album, Playlist Detail)
         when {
             isAdminDashboardOpen -> {
@@ -438,7 +444,7 @@ fun MainAppContent(viewModel: MainViewModel, authViewModel: AuthViewModel) {
                     }
                 )
             }
-            isImportPlaylistOpen -> {
+            isImportPlaylistOpen || currentSubScreen is com.example.viewmodel.SubScreenDestination.ImportPlaylistScreen -> {
                 val importViewModel: com.example.viewmodel.PlaylistImportViewModel = viewModel {
                     com.example.viewmodel.PlaylistImportViewModel(viewModel.repository)
                 }
@@ -453,8 +459,12 @@ fun MainAppContent(viewModel: MainViewModel, authViewModel: AuthViewModel) {
                 com.example.ui.screens.importer.ImportPlaylistScreen(
                     viewModel = importViewModel,
                     userId = currentUserId,
-                    onBack = { viewModel.closeImportPlaylistScreen() },
+                    onBack = {
+                        importViewModel.cancelImport()
+                        viewModel.closeImportPlaylistScreen()
+                    },
                     onNavigateToPlaylist = { plId ->
+                        importViewModel.reset()
                         viewModel.closeImportPlaylistScreen()
                         val pl = playlists.find { it.id == plId }
                         if (pl != null) {
@@ -528,6 +538,7 @@ fun MainAppContent(viewModel: MainViewModel, authViewModel: AuthViewModel) {
                             }
                         }
                     }
+                    is com.example.viewmodel.SubScreenDestination.ImportPlaylistScreen -> {}
                     null -> {}
                 }
             }
@@ -681,7 +692,8 @@ fun MainAppContent(viewModel: MainViewModel, authViewModel: AuthViewModel) {
                             onDeleteChatMessage = { viewModel.deleteRoomChatMessage(it) },
                             onSubmitSongRequest = { viewModel.submitSongRequest(it) },
                             onReviewSongRequest = { id, approved -> viewModel.reviewSongRequest(id, approved) },
-                            onSetPlaybackModes = { mode, shuffle -> viewModel.setRoomPlaybackModes(mode, shuffle) }
+                            onSetPlaybackModes = { mode, shuffle -> viewModel.setRoomPlaybackModes(mode, shuffle) },
+                            onImportPlaylistClick = { viewModel.openImportPlaylistScreen() }
                         )
                     }
                 }

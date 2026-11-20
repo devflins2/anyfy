@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
@@ -197,6 +198,7 @@ fun TogetherScreen(
     onSendChatMessage: (String, Boolean) -> Unit = { _, _ -> },
     onSendReaction: (String) -> Unit = {},
     onSelectTrack: (Track, String?) -> Unit = { _, _ -> },
+    onImportPlaylistClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -294,7 +296,8 @@ fun TogetherScreen(
                 onDeleteChatMessage = onDeleteChatMessage,
                 onReviewSongRequest = onReviewSongRequest,
                 onSetPlaybackModes = onSetPlaybackModes,
-                onExpandFullPlayer = onStartListening
+                onExpandFullPlayer = onStartListening,
+                onImportPlaylistClick = onImportPlaylistClick
             )
         }
 
@@ -361,6 +364,7 @@ fun TogetherScreen(
                     onAddToRoomQueue(track)
                     showSongPicker = false
                 },
+                onImportPlaylistClick = onImportPlaylistClick,
                 onDismiss = { showSongPicker = false }
             )
         }
@@ -374,6 +378,7 @@ fun TogetherScreen(
                     onSubmitSongRequest(track)
                     showRequestSongPicker = false
                 },
+                onImportPlaylistClick = onImportPlaylistClick,
                 onDismiss = { showRequestSongPicker = false }
             )
         }
@@ -424,7 +429,8 @@ private fun InRoomContent(
     onDeleteChatMessage: (String) -> Unit,
     onReviewSongRequest: (String, Boolean) -> Unit,
     onSetPlaybackModes: (String, Boolean) -> Unit,
-    onExpandFullPlayer: () -> Unit
+    onExpandFullPlayer: () -> Unit,
+    onImportPlaylistClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -630,6 +636,7 @@ private fun InRoomContent(
                         room = room,
                         isHost = isHost,
                         onOpenSongPicker = onOpenSongPicker,
+                        onImportPlaylistClick = onImportPlaylistClick,
                         onSelectTrack = onSelectTrack,
                         onRemoveItem = onRemoveQueueItem,
                         onMoveItem = onMoveQueueItem
@@ -1145,6 +1152,7 @@ private fun SharedQueueTabContent(
     room: Room,
     isHost: Boolean,
     onOpenSongPicker: () -> Unit,
+    onImportPlaylistClick: () -> Unit = {},
     onSelectTrack: (Track, String?) -> Unit,
     onRemoveItem: (String) -> Unit,
     onMoveItem: (Int, Int) -> Unit
@@ -1165,20 +1173,38 @@ private fun SharedQueueTabContent(
                 color = FlinsTheme.colors.textMuted
             )
 
-            // Add Song Button
-            GlassButton(
-                onClick = onOpenSongPicker,
-                variant = GlassButtonVariant.SECONDARY,
-                testTag = "add_to_party_queue_button"
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    tint = Color(0xFFF0F0F0),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Add Song", style = FlinsTheme.typography.caption.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF0F0F0))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Import Playlist Button
+                GlassButton(
+                    onClick = onImportPlaylistClick,
+                    variant = GlassButtonVariant.SECONDARY,
+                    testTag = "import_playlist_party_button"
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Import Playlist",
+                        tint = Color(0xFFF0F0F0),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Import", style = FlinsTheme.typography.caption.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF0F0F0))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                // Add Song Button
+                GlassButton(
+                    onClick = onOpenSongPicker,
+                    variant = GlassButtonVariant.SECONDARY,
+                    testTag = "add_to_party_queue_button"
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        tint = Color(0xFFF0F0F0),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Song", style = FlinsTheme.typography.caption.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF0F0F0))
+                }
             }
         }
 
@@ -2112,6 +2138,7 @@ private fun AddSongToRoomQueueSheet(
     availableTracks: List<Track>,
     sheetTitle: String = "Add Song to Party Queue",
     onTrackSelected: (Track) -> Unit,
+    onImportPlaylistClick: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -2138,11 +2165,34 @@ private fun AddSongToRoomQueueSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 36.dp)
         ) {
-            Text(
-                text = sheetTitle,
-                style = FlinsTheme.typography.title,
-                color = FlinsTheme.colors.textPrimary
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = sheetTitle,
+                    style = FlinsTheme.typography.title,
+                    color = FlinsTheme.colors.textPrimary
+                )
+                GlassButton(
+                    onClick = {
+                        onDismiss()
+                        onImportPlaylistClick()
+                    },
+                    variant = GlassButtonVariant.SECONDARY,
+                    testTag = "sheet_import_playlist_button"
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Import Playlist",
+                        tint = Color(0xFFF0F0F0),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Import", style = FlinsTheme.typography.caption.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF0F0F0))
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             // Search Bar

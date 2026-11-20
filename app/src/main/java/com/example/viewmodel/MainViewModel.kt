@@ -60,6 +60,7 @@ sealed interface SubScreenDestination {
     data class ArtistScreen(val artist: Artist) : SubScreenDestination
     data class AlbumScreen(val album: Album) : SubScreenDestination
     data class PlaylistScreen(val playlistId: String) : SubScreenDestination
+    object ImportPlaylistScreen : SubScreenDestination
 }
 
 class MainViewModel(
@@ -526,14 +527,17 @@ class MainViewModel(
     fun selectTab(tab: MainTab) {
         _currentTab.value = tab
         _subScreenStack.value = emptyList()
-        _subScreenStack.value = emptyList()
         _selectedArtist.value = null
         _selectedAlbum.value = null
         _selectedPlaylistId.value = null
+        _isImportPlaylistOpen.value = false
+        _isSettingsOpen.value = false
+        _isAdminDashboardOpen.value = false
     }
 
     // Sub-Screen navigation
     fun navigateToArtist(artist: Artist) {
+        _isImportPlaylistOpen.value = false
         val cached = repository.getArtistById(artist.id)
             ?: repository.artists.find { it.name.equals(artist.name, ignoreCase = true) }
         val target = if (cached != null && (cached.tracks.isNotEmpty() || cached.albums.isNotEmpty())) cached else artist
@@ -579,6 +583,7 @@ class MainViewModel(
     }
 
     fun navigateToAlbum(album: Album) {
+        _isImportPlaylistOpen.value = false
         val cached = repository.getAlbumById(album.id)
             ?: (if (!isGenericAlbumTitle(album.title)) repository.albums.find { it.title.equals(album.title, ignoreCase = true) && (album.artist.isBlank() || it.artist.equals(album.artist, ignoreCase = true)) } else null)
         val isCachedValid = cached != null && cached.tracks.isNotEmpty() &&
@@ -623,6 +628,7 @@ class MainViewModel(
     }
 
     fun navigateToPlaylist(playlist: Playlist) {
+        _isImportPlaylistOpen.value = false
         _subScreenStack.update { it + SubScreenDestination.PlaylistScreen(playlist.id) }
         _selectedPlaylistId.value = playlist.id
         _selectedPlaylistOverride.value = playlist
@@ -648,17 +654,26 @@ class MainViewModel(
 
     fun openImportPlaylistScreen() {
         _isImportPlaylistOpen.value = true
+        _subScreenStack.update { stack ->
+            if (stack.none { it is SubScreenDestination.ImportPlaylistScreen }) {
+                stack + SubScreenDestination.ImportPlaylistScreen
+            } else stack
+        }
     }
 
     fun closeImportPlaylistScreen() {
         _isImportPlaylistOpen.value = false
+        _subScreenStack.update { stack ->
+            stack.filterNot { it is SubScreenDestination.ImportPlaylistScreen }
+        }
     }
 
     fun navigateBack() {
         when {
+            _isFullPlayerVisible.value -> _isFullPlayerVisible.value = false
             _isAdminDashboardOpen.value -> _isAdminDashboardOpen.value = false
             _isSettingsOpen.value -> _isSettingsOpen.value = false
-            _isImportPlaylistOpen.value -> _isImportPlaylistOpen.value = false
+            _isImportPlaylistOpen.value -> closeImportPlaylistScreen()
             _subScreenStack.value.isNotEmpty() -> {
                 val next = _subScreenStack.value.dropLast(1)
                 _subScreenStack.value = next
@@ -666,6 +681,9 @@ class MainViewModel(
                 _selectedArtist.value = (top as? SubScreenDestination.ArtistScreen)?.artist
                 _selectedAlbum.value = (top as? SubScreenDestination.AlbumScreen)?.album
                 _selectedPlaylistId.value = (top as? SubScreenDestination.PlaylistScreen)?.playlistId
+                if (top !is SubScreenDestination.ImportPlaylistScreen) {
+                    _isImportPlaylistOpen.value = false
+                }
                 if (_selectedPlaylistId.value == null) {
                     _selectedPlaylistOverride.value = null
                 }
@@ -929,6 +947,9 @@ class MainViewModel(
             if (result.isSuccess) {
                 showUserMessage("Created '$trimmed' on YouTube Music")
                 closeCreatePlaylistSheet()
+                try {
+                    repository.fetchUserPlaylists(forceRefresh = true)
+                } catch (_: Exception) {}
             } else {
                 val msg = result.exceptionOrNull()?.message ?: "Could not create playlist"
                 showUserMessage(msg)
@@ -1078,6 +1099,9 @@ class MainViewModel(
             val result = repository.addTrackToPlaylistResult(playlistId, track)
             if (result.isSuccess) {
                 showUserMessage("Added to $plName")
+                try {
+                    repository.fetchUserPlaylists(forceRefresh = true)
+                } catch (_: Exception) {}
             } else {
                 val err = result.exceptionOrNull()
                 if (err is IllegalStateException && err.message?.contains("already in playlist", ignoreCase = true) == true) {
@@ -1102,6 +1126,9 @@ class MainViewModel(
                 val result = repository.addTrackToPlaylistResult(playlistId, trackId)
                 if (result.isSuccess) {
                     showUserMessage("Added to $plName")
+                    try {
+                        repository.fetchUserPlaylists(forceRefresh = true)
+                    } catch (_: Exception) {}
                 } else {
                     val err = result.exceptionOrNull()
                     if (err is IllegalStateException && err.message?.contains("already in playlist", ignoreCase = true) == true) {
@@ -1124,15 +1151,18 @@ class MainViewModel(
         }
         viewModelScope.launch {
             showUserMessage("Creating playlist on YouTube Music...")
-            val createRes = repository.createPlaylistResult(trimmed, description.trim(), privacyStatus = privacyStatus)
+            repository.persistTrackMetadata(track)
+            val createRes = repository.createPlaylistResult(
+                name = trimmed,
+                description = description.trim(),
+                privacyStatus = privacyStatus,
+                initialTrackIds = listOf(track.id)
+            )
             if (createRes.isSuccess) {
-                val newId = createRes.getOrThrow()
-                val addRes = repository.addTrackToPlaylistResult(newId, track)
-                if (addRes.isSuccess) {
-                    showUserMessage("Created '$trimmed' and added '${track.title}'")
-                } else {
-                    showUserMessage("Created '$trimmed', but could not add song")
-                }
+                showUserMessage("Created '$trimmed' and added '${track.title}'")
+                try {
+                    repository.fetchUserPlaylists(forceRefresh = true)
+                } catch (_: Exception) {}
             } else {
                 val msg = createRes.exceptionOrNull()?.message ?: "Could not create playlist"
                 showUserMessage(msg)
@@ -1153,15 +1183,17 @@ class MainViewModel(
             }
             viewModelScope.launch {
                 showUserMessage("Creating playlist on YouTube Music...")
-                val createRes = repository.createPlaylistResult(trimmed, description.trim(), privacyStatus = privacyStatus)
+                val createRes = repository.createPlaylistResult(
+                    name = trimmed,
+                    description = description.trim(),
+                    privacyStatus = privacyStatus,
+                    initialTrackIds = listOf(trackId)
+                )
                 if (createRes.isSuccess) {
-                    val newId = createRes.getOrThrow()
-                    val addRes = repository.addTrackToPlaylistResult(newId, trackId)
-                    if (addRes.isSuccess) {
-                        showUserMessage("Created '$trimmed' and added track")
-                    } else {
-                        showUserMessage("Created '$trimmed', but could not add song")
-                    }
+                    showUserMessage("Created '$trimmed' and added track")
+                    try {
+                        repository.fetchUserPlaylists(forceRefresh = true)
+                    } catch (_: Exception) {}
                 } else {
                     val msg = createRes.exceptionOrNull()?.message ?: "Could not create playlist"
                     showUserMessage(msg)
@@ -1641,6 +1673,7 @@ class MainViewModel(
 
     // Settings Navigation & Preferences
     fun openAdminDashboard() {
+        _isImportPlaylistOpen.value = false
         _isAdminDashboardOpen.value = true
     }
 
@@ -1649,6 +1682,7 @@ class MainViewModel(
     }
 
     fun openSettings() {
+        _isImportPlaylistOpen.value = false
         _isSettingsOpen.value = true
     }
 

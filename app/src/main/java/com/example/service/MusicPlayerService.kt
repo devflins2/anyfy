@@ -42,6 +42,9 @@ class MusicPlayerService : Service() {
     private var lastTrackId: String? = null
     private var lastIsPlaying: Boolean? = null
     private var lastArtwork: android.graphics.Bitmap? = null
+    private var lastDurationMs: Long = 0L
+    private var lastReportedPositionMs: Long = -1L
+    private var lastPlaybackStateUpdateTimeMs: Long = 0L
 
     fun getMediaSession(): MediaSessionCompat = mediaSession
 
@@ -66,6 +69,9 @@ class MusicPlayerService : Service() {
         lastTrackId = null
         lastArtwork = null
         lastIsPlaying = null
+        lastDurationMs = 0L
+        lastReportedPositionMs = -1L
+        lastPlaybackStateUpdateTimeMs = 0L
         stopSelf()
     }
 
@@ -186,9 +192,7 @@ class MusicPlayerService : Service() {
                 }
             }
             override fun onSeekTo(pos: Long) {
-                if (playbackService?.uiState?.value?.currentTrack != null) {
-                    playbackService?.seekTo(pos)
-                }
+                seekTo(pos)
             }
             override fun onStop() {
                 shutdownPlaybackSession()
@@ -272,7 +276,9 @@ class MusicPlayerService : Service() {
         playbackStateJob = service.uiState.onEach { state ->
             val track = state.currentTrack
             if (track == null) {
-                shutdownPlaybackSession()
+                if (lastTrackId != null) {
+                    shutdownPlaybackSession()
+                }
                 return@onEach
             }
 
@@ -282,13 +288,19 @@ class MusicPlayerService : Service() {
 
             val trackChanged = track.id != lastTrackId
             val playStateChanged = state.isPlaying != lastIsPlaying
+            val durationResolved = state.durationMs > 0L && state.durationMs != lastDurationMs
 
             if (trackChanged) {
                 lastTrackId = track.id
-                updateMediaSessionMetadata(track)
+                lastArtwork = null
+                lastDurationMs = 0L
+                updateMediaSessionMetadata(track, state.durationMs)
+                updatePlaybackState(state.isPlaying, state.currentPositionMs, force = true)
+            } else if (durationResolved) {
+                updateMediaSessionMetadata(track, state.durationMs)
             }
 
-            updatePlaybackState(state.isPlaying, state.currentPositionMs)
+            updatePlaybackState(state.isPlaying, state.currentPositionMs, force = trackChanged || playStateChanged)
 
             if (trackChanged || playStateChanged) {
                 lastIsPlaying = state.isPlaying
@@ -326,47 +338,93 @@ class MusicPlayerService : Service() {
         }
     }
 
+    fun seekTo(positionMs: Long) {
+        if (playbackService?.uiState?.value?.currentTrack != null) {
+            val isPlaying = playbackService?.uiState?.value?.isPlaying ?: true
+            updatePlaybackState(isPlaying = isPlaying, position = positionMs, force = true)
+            playbackService?.seekTo(positionMs)
+        }
+    }
+
     fun updateNotificationForCurrentState() {
         val state = playbackService?.uiState?.value ?: return
         val track = state.currentTrack ?: return
         postNotification(track, state.isPlaying, state.currentPositionMs, lastArtwork)
     }
 
-    private fun updateMediaSessionMetadata(track: Track) {
-        lastArtwork = null // Clear old artwork
+    private fun updateMediaSessionMetadata(track: Track, resolvedDurationMs: Long = 0L) {
+        val durationMs = if (resolvedDurationMs > 0L) {
+            resolvedDurationMs
+        } else {
+            (track.durationSeconds * 1000L).coerceAtLeast(0L)
+        }
+        lastDurationMs = durationMs
+
         val metadataBuilder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.album)
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.durationSeconds * 1000L)
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
+
+        if (lastArtwork != null) {
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, lastArtwork)
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, lastArtwork)
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, lastArtwork)
+        }
 
         mediaSession.setMetadata(metadataBuilder.build())
 
-        // Asynchronously load artwork
+        // Asynchronously load artwork if not already present
         val artworkUrl = track.displayArtwork.ifBlank { track.displayBannerArtwork.ifBlank { track.artwork } }
-        notificationManager.loadArtwork(artworkUrl) { bitmap ->
-            if (lastTrackId == track.id) {
-                lastArtwork = bitmap
-                val newMetadata = MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.album)
-                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.durationSeconds * 1000L)
-                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
-                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
-                    .putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, bitmap)
-                    .build()
-                mediaSession.setMetadata(newMetadata)
+        if (artworkUrl.isNotBlank() && lastArtwork == null) {
+            notificationManager.loadArtwork(artworkUrl) { bitmap ->
+                if (lastTrackId == track.id) {
+                    lastArtwork = bitmap
+                    val currentDur = lastDurationMs.takeIf { it > 0L } ?: (track.durationSeconds * 1000L).coerceAtLeast(0L)
+                    val newMetadata = MediaMetadataCompat.Builder()
+                        .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
+                        .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
+                        .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.album)
+                        .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, currentDur)
+                        .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
+                        .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
+                        .putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, bitmap)
+                        .build()
+                    mediaSession.setMetadata(newMetadata)
 
-                // Re-notify to display artwork in notification
-                playbackService?.uiState?.value?.let { state ->
-                    postNotification(track, state.isPlaying, state.currentPositionMs, bitmap)
+                    // Re-notify to display artwork in notification
+                    playbackService?.uiState?.value?.let { state ->
+                        postNotification(track, state.isPlaying, state.currentPositionMs, bitmap)
+                    }
                 }
             }
         }
     }
 
-    private fun updatePlaybackState(isPlaying: Boolean, position: Long) {
+    private fun updatePlaybackState(isPlaying: Boolean, position: Long, force: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val playStateChanged = lastIsPlaying != isPlaying
+
+        // Calculate extrapolated position since last update if playing
+        val elapsedSinceLastUpdate = if (lastPlaybackStateUpdateTimeMs > 0L) (now - lastPlaybackStateUpdateTimeMs) else 0L
+        val extrapolatedPosition = if (lastIsPlaying == true) {
+            lastReportedPositionMs + elapsedSinceLastUpdate
+        } else {
+            lastReportedPositionMs
+        }
+        val drift = kotlin.math.abs(position - extrapolatedPosition)
+
+        // Throttle updates: only dispatch IPC when forced, state changed, drift > 1500ms, or periodic keepalive
+        val shouldUpdate = force || playStateChanged || drift > 1500L || (now - lastPlaybackStateUpdateTimeMs >= 2500L)
+
+        if (!shouldUpdate && lastPlaybackStateUpdateTimeMs > 0L) {
+            return
+        }
+
+        lastIsPlaying = isPlaying
+        lastReportedPositionMs = position
+        lastPlaybackStateUpdateTimeMs = now
+
         val playbackSpeed = if (isPlaying) 1.0f else 0.0f
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         val playbackState = PlaybackStateCompat.Builder()
@@ -379,7 +437,7 @@ class MusicPlayerService : Service() {
                         PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                         PlaybackStateCompat.ACTION_SEEK_TO
             )
-            .setState(state, position, playbackSpeed)
+            .setState(state, position, playbackSpeed, now)
             .build()
         mediaSession.setPlaybackState(playbackState)
     }

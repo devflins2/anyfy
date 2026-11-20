@@ -53,8 +53,22 @@ interface YtMusicService {
     suspend fun getRadioTracks(videoId: String): Result<List<YtTrack>> =
         Result.success(emptyList())
 
-    suspend fun createPlaylist(title: String, description: String = "", privacyStatus: String = "PRIVATE"): Result<String> =
-        Result.success("")
+    suspend fun createPlaylist(
+        title: String,
+        description: String = "",
+        privacyStatus: String = "PRIVATE"
+    ): Result<String> = Result.success("")
+
+    suspend fun createPlaylist(
+        title: String,
+        description: String = "",
+        privacyStatus: String = "PRIVATE",
+        videoIds: List<String> = emptyList()
+    ): Result<String> = createPlaylist(title, description, privacyStatus).also { res ->
+        if (res.isSuccess && videoIds.isNotEmpty()) {
+            addPlaylistItems(res.getOrThrow(), videoIds)
+        }
+    }
 
     suspend fun editPlaylist(playlistId: String, newTitle: String? = null, newDescription: String? = null): Result<Boolean> =
         Result.success(true)
@@ -422,8 +436,13 @@ class DefaultYtMusicService(
     }
 
     override suspend fun getUserPlaylists(continuationToken: String?): Result<List<YtPlaylist>> = runCatching {
-        val json = client.browse("FEmusic_liked_playlists")
-        YtMusicParser.parseLibraryPlaylists(json)
+        val json1 = client.browse("FEmusic_liked_playlists")
+        val list1 = YtMusicParser.parseLibraryPlaylists(json1)
+
+        val json2 = client.browse("FEmusic_library_corpus_playlists")
+        val list2 = YtMusicParser.parseLibraryPlaylists(json2)
+
+        (list1 + list2).distinctBy { it.id.removePrefix("VL") }
     }
 
     override suspend fun getUserSavedAlbums(continuationToken: String?): Result<List<YtAlbum>> = runCatching {
@@ -469,11 +488,19 @@ class DefaultYtMusicService(
         YtMusicParser.parseRadioTracks(json)
     }
 
-    override suspend fun createPlaylist(title: String, description: String, privacyStatus: String): Result<String> = runCatching {
+    override suspend fun createPlaylist(title: String, description: String, privacyStatus: String): Result<String> =
+        createPlaylist(title, description, privacyStatus, emptyList())
+
+    override suspend fun createPlaylist(
+        title: String,
+        description: String,
+        privacyStatus: String,
+        videoIds: List<String>
+    ): Result<String> = runCatching {
         if (!client.isAuthenticated()) {
-            throw IllegalStateException("YouTube Music account authentication required")
+            throw IllegalStateException("YouTube Music account authentication required. Please sign in via Settings.")
         }
-        val id = client.createPlaylist(title, description, privacyStatus)
+        val id = client.createPlaylist(title, description, privacyStatus, videoIds.ifEmpty { null })
         if (id.isBlank()) {
             throw java.io.IOException("YouTube Music failed to create playlist '$title'")
         }

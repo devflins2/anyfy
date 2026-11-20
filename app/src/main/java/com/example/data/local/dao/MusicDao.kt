@@ -134,4 +134,27 @@ interface MusicDao {
 
     @Query("SELECT * FROM track_metadata")
     fun getAllCachedTrackMetadata(): Flow<List<TrackMetadataEntity>>
+
+    // Maintenance & Safe Cache Pruning (Preserves liked, playlist, and recent tracks)
+    @Query("""
+        DELETE FROM track_metadata 
+        WHERE id NOT IN (SELECT trackId FROM liked_tracks)
+          AND id NOT IN (SELECT trackId FROM playlist_tracks)
+          AND id NOT IN (SELECT trackId FROM recently_played)
+          AND cachedAt < :expiryTimestamp
+    """)
+    suspend fun pruneExpiredMetadata(expiryTimestamp: Long): Int
+
+    @Query("""
+        DELETE FROM track_metadata
+        WHERE id NOT IN (SELECT trackId FROM liked_tracks)
+          AND id NOT IN (SELECT trackId FROM playlist_tracks)
+          AND id NOT IN (SELECT trackId FROM recently_played)
+          AND id NOT IN (
+              SELECT id FROM track_metadata 
+              ORDER BY cachedAt DESC 
+              LIMIT :keepLimit
+          )
+    """)
+    suspend fun trimOrphanMetadata(keepLimit: Int = 300): Int
 }

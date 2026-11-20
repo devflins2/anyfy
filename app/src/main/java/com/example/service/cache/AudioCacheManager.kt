@@ -20,7 +20,7 @@ import java.io.File
  */
 object AudioCacheManager {
     private const val TAG = "AudioCacheManager"
-    private const val MAX_CACHE_SIZE = 120 * 1024 * 1024L // 120 MB LRU disk cache
+    private const val MAX_CACHE_SIZE = 40 * 1024 * 1024L // 40 MB LRU disk cache (holds approx 12-15 full streams / 50+ preloads)
     const val PRELOAD_CHUNK_SIZE = 768 * 1024L // ~768 KB (approx 35-45s of audio for instant zero-delay playback)
 
     @Volatile

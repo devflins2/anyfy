@@ -40,6 +40,7 @@ class FlinsApplication : Application(), ImageLoaderFactory {
         com.example.service.diagnostics.PlaybackDiagnosticLogger.init(this)
         initFallbackFirebase()
         initOnDeviceYoutubeDl()
+        cleanExpiredTemporaryFiles()
     }
 
     /**
@@ -90,7 +91,7 @@ class FlinsApplication : Application(), ImageLoaderFactory {
             .diskCache {
                 DiskCache.Builder()
                     .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(64L * 1024 * 1024) // 64 MB disk cache for album artwork
+                    .maxSizeBytes(24L * 1024 * 1024) // 24 MB disk cache for album artwork (approx 800+ albums)
                     .build()
             }
             .respectCacheHeaders(false) // Cache cover artwork reliably across sessions
@@ -130,6 +131,34 @@ class FlinsApplication : Application(), ImageLoaderFactory {
             } catch (e: Throwable) {
                 // Graceful error logging without exposing secrets or crashing app startup
                 Log.e(TAG, "Failed to initialize on-device YoutubeDL: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Periodically cleans up expired temporary files and incomplete update downloads
+     * from cacheDir without touching active media playback or image caches.
+     */
+    private fun cleanExpiredTemporaryFiles() {
+        applicationScope.launch {
+            try {
+                // 1. Clean up temporary diagnostic share exports
+                val diagFile = java.io.File(cacheDir, "anyfy_playback_diagnostics.txt")
+                if (diagFile.exists()) diagFile.delete()
+
+                // 2. Clean up orphaned incomplete update downloads in cacheDir/updates/
+                val updatesDir = java.io.File(cacheDir, "updates")
+                if (updatesDir.exists() && updatesDir.isDirectory) {
+                    val files = updatesDir.listFiles() ?: emptyArray()
+                    val oneDayAgo = System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(1)
+                    for (file in files) {
+                        if (file.name.endsWith(".tmp") || (file.lastModified() < oneDayAgo)) {
+                            file.delete()
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.w(TAG, "Temporary cache cleanup skipped: ${e.message}")
             }
         }
     }

@@ -48,6 +48,47 @@ class YtMusicClient(
         const val FILTER_ARTISTS = "EgWKAQIgAWoSEAUQAxAJEAQQChAVEA4QEBAR"
         const val FILTER_PLAYLISTS = "EgeKAQQoAEABahIQBRADEAkQBBAKEBUQDhAQEBE="
         const val FILTER_VIDEOS = "EgWKAQIQAWoSEAUQAxAJEAQQChAVEA4QEBAR"
+
+        fun cleanVideoId(id: String): String {
+            return id.removePrefix("yt_")
+                .removePrefix("online_")
+                .removePrefix("api_")
+                .removePrefix("track_")
+                .trim()
+        }
+
+        fun cleanPlaylistId(id: String): String {
+            return id.removePrefix("VL")
+                .removePrefix("FL")
+                .trim()
+        }
+
+        /**
+         * Validates InnerTube browse/edit_playlist mutation responses.
+         * InnerTube edit operations return status: "STATUS_SUCCEEDED" or an actions array
+         * where each action succeeded. Any STATUS_FAILED or error payload indicates failure.
+         */
+        fun isEditPlaylistSuccessful(response: JSONObject): Boolean {
+            if (response.has("error")) return false
+            val topStatus = response.optString("status")
+            if (topStatus == "STATUS_FAILED") return false
+            if (topStatus == "STATUS_SUCCEEDED") return true
+
+            val actions = response.optJSONArray("actions")
+            if (actions != null && actions.length() > 0) {
+                for (i in 0 until actions.length()) {
+                    val actionObj = actions.optJSONObject(i) ?: continue
+                    val actStatus = actionObj.optString("status")
+                    if (actStatus == "STATUS_FAILED") return false
+                    if (actionObj.has("errorMessage")) return false
+                }
+                for (i in 0 until actions.length()) {
+                    val actionObj = actions.optJSONObject(i) ?: continue
+                    if (actionObj.optString("status") == "STATUS_SUCCEEDED") return true
+                }
+            }
+            return false
+        }
     }
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -177,19 +218,35 @@ class YtMusicClient(
         privacyStatus: String = "PRIVATE",
         videoIds: List<String>? = null
     ): String = withContext(Dispatchers.IO) {
-        if (!isAuthenticated()) return@withContext ""
+        if (!isAuthenticated()) {
+            android.util.Log.w("YtMusicClient", "createPlaylist aborted: client not authenticated")
+            return@withContext ""
+        }
+        val cleanTitle = title.trim()
+        if (cleanTitle.isBlank()) return@withContext ""
+
         val bodyJson = JSONObject().apply {
             put("context", buildClientContext())
-            put("title", title)
-            if (description.isNotBlank()) put("description", description)
-            put("privacyStatus", privacyStatus)
+            put("title", cleanTitle)
+            if (description.isNotBlank()) put("description", description.trim())
+            put("privacyStatus", privacyStatus.uppercase().trim().ifBlank { "PRIVATE" })
             if (!videoIds.isNullOrEmpty()) {
                 val array = JSONArray()
-                videoIds.forEach { array.put(it.removePrefix("yt_").trim()) }
-                put("videoIds", array)
+                videoIds.forEach {
+                    val cleanVid = cleanVideoId(it)
+                    if (cleanVid.isNotBlank()) array.put(cleanVid)
+                }
+                if (array.length() > 0) {
+                    put("videoIds", array)
+                }
             }
         }
         val response = executePost("$BASE_URL/playlist/create", bodyJson.toString())
+        if (response.has("error")) {
+            val errMsg = response.optJSONObject("error")?.optString("message") ?: "InnerTube API error"
+            android.util.Log.e("YtMusicClient", "createPlaylist error: $errMsg")
+            return@withContext ""
+        }
         val plId = response.optString("playlistId").ifBlank {
             response.optJSONObject("playlist")?.optString("playlistId") ?: ""
         }
@@ -213,24 +270,24 @@ class YtMusicClient(
         if (newTitle != null) {
             actions.put(JSONObject().apply {
                 put("action", "ACTION_SET_PLAYLIST_NAME")
-                put("playlistName", newTitle)
+                put("playlistName", newTitle.trim())
             })
         }
         if (newDescription != null) {
             actions.put(JSONObject().apply {
                 put("action", "ACTION_SET_PLAYLIST_DESCRIPTION")
-                put("playlistDescription", newDescription)
+                put("playlistDescription", newDescription.trim())
             })
         }
         if (actions.length() == 0) return@withContext true
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanPl = cleanPlaylistId(playlistId)
         val bodyJson = JSONObject().apply {
             put("context", buildClientContext())
             put("playlistId", cleanPl)
             put("actions", actions)
         }
         val response = executePost("$BASE_URL/browse/edit_playlist", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || response.has("actions") || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        val success = isEditPlaylistSuccessful(response)
         if (success) {
             invalidatePlaylistCache(cleanPl)
         }
@@ -245,8 +302,8 @@ class YtMusicClient(
         videoId: String
     ): Boolean = withContext(Dispatchers.IO) {
         if (!isAuthenticated()) return@withContext false
-        val cleanVid = videoId.removePrefix("yt_").trim()
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanVid = cleanVideoId(videoId)
+        val cleanPl = cleanPlaylistId(playlistId)
         val actions = JSONArray().put(JSONObject().apply {
             put("action", "ACTION_ADD_VIDEO")
             put("addedVideoId", cleanVid)
@@ -257,7 +314,7 @@ class YtMusicClient(
             put("actions", actions)
         }
         val response = executePost("$BASE_URL/browse/edit_playlist", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || response.has("actions") || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        val success = isEditPlaylistSuccessful(response)
         if (success) {
             invalidatePlaylistCache(cleanPl)
         }
@@ -272,10 +329,10 @@ class YtMusicClient(
         videoIds: List<String>
     ): Boolean = withContext(Dispatchers.IO) {
         if (!isAuthenticated() || videoIds.isEmpty()) return@withContext false
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanPl = cleanPlaylistId(playlistId)
         val actions = JSONArray()
         for (vid in videoIds) {
-            val cleanVid = vid.removePrefix("yt_").trim()
+            val cleanVid = cleanVideoId(vid)
             if (cleanVid.isNotBlank()) {
                 actions.put(JSONObject().apply {
                     put("action", "ACTION_ADD_VIDEO")
@@ -290,7 +347,7 @@ class YtMusicClient(
             put("actions", actions)
         }
         val response = executePost("$BASE_URL/browse/edit_playlist", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || response.has("actions") || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        val success = isEditPlaylistSuccessful(response)
         if (success) {
             invalidatePlaylistCache(cleanPl)
         }
@@ -306,8 +363,8 @@ class YtMusicClient(
         setVideoId: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         if (!isAuthenticated()) return@withContext false
-        val cleanVid = videoId.removePrefix("yt_").trim()
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanVid = cleanVideoId(videoId)
+        val cleanPl = cleanPlaylistId(playlistId)
         val action = JSONObject().apply {
             put("action", "ACTION_REMOVE_VIDEO")
             put("removedVideoId", cleanVid)
@@ -321,7 +378,7 @@ class YtMusicClient(
             put("actions", JSONArray().put(action))
         }
         val response = executePost("$BASE_URL/browse/edit_playlist", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || response.has("actions") || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        val success = isEditPlaylistSuccessful(response)
         if (success) {
             invalidatePlaylistCache(cleanPl)
         }
@@ -336,10 +393,10 @@ class YtMusicClient(
         videoIds: List<String>
     ): Boolean = withContext(Dispatchers.IO) {
         if (!isAuthenticated() || videoIds.isEmpty()) return@withContext false
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanPl = cleanPlaylistId(playlistId)
         val actions = JSONArray()
         for (vid in videoIds) {
-            val cleanVid = vid.removePrefix("yt_").trim()
+            val cleanVid = cleanVideoId(vid)
             if (cleanVid.isNotBlank()) {
                 actions.put(JSONObject().apply {
                     put("action", "ACTION_REMOVE_VIDEO")
@@ -354,7 +411,7 @@ class YtMusicClient(
             put("actions", actions)
         }
         val response = executePost("$BASE_URL/browse/edit_playlist", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || response.has("actions") || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        val success = isEditPlaylistSuccessful(response)
         if (success) {
             invalidatePlaylistCache(cleanPl)
         }
@@ -370,7 +427,7 @@ class YtMusicClient(
         successorSetVideoId: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         if (!isAuthenticated()) return@withContext false
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanPl = cleanPlaylistId(playlistId)
         val action = JSONObject().apply {
             put("action", "ACTION_MOVE_VIDEO_BEFORE")
             put("setVideoId", setVideoId)
@@ -384,7 +441,7 @@ class YtMusicClient(
             put("actions", JSONArray().put(action))
         }
         val response = executePost("$BASE_URL/browse/edit_playlist", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || response.has("actions") || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        val success = isEditPlaylistSuccessful(response)
         if (success) {
             invalidatePlaylistCache(cleanPl)
         }
@@ -396,13 +453,16 @@ class YtMusicClient(
      */
     suspend fun deletePlaylist(playlistId: String): Boolean = withContext(Dispatchers.IO) {
         if (!isAuthenticated()) return@withContext false
-        val cleanPl = playlistId.removePrefix("VL").trim()
+        val cleanPl = cleanPlaylistId(playlistId)
         val bodyJson = JSONObject().apply {
             put("context", buildClientContext())
             put("playlistId", cleanPl)
         }
         val response = executePost("$BASE_URL/playlist/delete", bodyJson.toString())
-        val success = response.optString("status") == "STATUS_SUCCEEDED" || (response.optJSONObject("responseContext") != null && !response.has("error"))
+        if (response.has("error")) return@withContext false
+        val status = response.optString("status")
+        if (status == "STATUS_FAILED") return@withContext false
+        val success = status == "STATUS_SUCCEEDED" || response.has("command") || response.has("commands") || (response.optJSONObject("responseContext") != null && !response.has("error"))
         if (success) {
             invalidatePlaylistCache(cleanPl)
             invalidateLibraryPlaylistsCache()
